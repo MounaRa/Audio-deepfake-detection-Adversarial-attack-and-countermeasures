@@ -1,0 +1,96 @@
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+from tensorflow.keras.models import load_model
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import cv2
+import os
+import PIL
+import time
+from IPython import display
+# example of defining a u-net encoder-decoder generator model
+from keras.initializers import RandomNormal
+from keras.models import Model
+from google.cloud import speech_v1 as speech
+from tensorflow.keras.models import load_model
+from scipy.io import wavfile
+import numpy as np
+import cv2
+import os 
+import io
+import librosa
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="path"
+###########################Read one audio file##########################################
+#read the audio file and its corresponding histogram
+#SR, Noise = wavfile.read(".\deepfake\noise2.wav")
+#img=cv2.imread(".\deepfake\noise2bis.jpg")
+#img=cv2.resize(img,(150,150)) 
+#img=np.reshape(img,[1,150,150,3]) 
+#############################step1:Deep4SNET##########################################
+def create_discriminator():
+    #model = r'C:\Users\97466\Desktop\deepfake\deep4snetModel\model_Deep4SNet.h5'
+    model = r'C:\Users\97466\Desktop\deepfake\deep4snetModel\model_Deep4SNet.h5'
+    #model = '/Users/mounarabhi/Desktop/deepfakes/code/deep4snetModel/model_Deep4SNet.h5'
+    weights_model = r'C:\Users\97466\Desktop\deepfake\deep4snetModel\weights_Deep4SNet.h5'
+    #weights_model = '/Users/mounarabhi/Desktop/deepfakes/code/deep4snetModel/weights_Deep4SNet
+    model = load_model(model)
+    model.load_weights(weights_model)
+    return model
+
+discriminator = create_discriminator()
+
+################################step2:Speech to text###########################################
+ASR_d=0
+ASR_DT=0
+def speech_to_text(config, audio):
+    client = speech.SpeechClient()
+    response = client.recognize(config=config, audio=audio)
+    print_sentences(response)
+    return response
+
+
+def print_sentences(response):
+    for result in response.results:
+        best_alternative = result.alternatives[0]
+        transcript = best_alternative.transcript
+        confidence = best_alternative.confidence
+        print("-" * 80)
+        print(f"Transcript: {transcript}")
+        print(f"Confidence: {confidence:.0%}")
+for i in range(1000):
+    print(i)
+    #READ the test set
+    filename="./white noises/whitenoise"+str(i)+".mp3"
+    noise,sr=librosa.load(filename)
+    hist_path="./Hist_whitenoises//whitenoise"+str(i)+".png"
+    hist=cv2.imread(hist_path)
+    
+    hist=cv2.resize(hist,(150,150)) 
+    hist=np.reshape(hist,[1,150,150,3]) 
+    hist=hist.astype('float32')
+
+    classes = discriminator.predict(hist, batch_size=19)
+    
+    if classes[0]>0.5:
+        print("Deep4SNet has classified the audio as legitimate")
+        ASR_d+=1
+        #if Deep4SNet classified the audio as legitemate, pass it to Speech-To-Text as decribed in Figure 7
+        #This is the test for the first attack
+        config = speech.RecognitionConfig(
+        encoding=speech.RecognitionConfig.AudioEncoding.ENCODING_UNSPECIFIED,
+        sample_rate_hertz=sr,
+        language_code='en-US',
+        audio_channel_count = 2)
+        with io.open(filename, 'rb') as audio_file:
+            content = audio_file.read()
+        audio = speech.RecognitionAudio(content=content)
+        
+        rep=speech_to_text(config, audio)
+        if (len(rep.results)==0):
+            print("The audio  is fake")
+        else:
+             print("The audio  is original")
+             ASR_DT+=1
+    
